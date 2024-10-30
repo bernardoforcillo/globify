@@ -1,5 +1,8 @@
 # 🌍 Globify ⚡ the blazing-fast CLI for i18n
 
+> [!IMPORTANT]  
+> This project is a work in progress. As such, it is not ready for production use and does not currently support many useful features such as string interpolation. 
+
 **Globify** is a blazing-fast CLI tool designed to simplify and accelerate the internationalization (i18n) process for
 your applications. Whether you're building a web app, mobile app, or any software product that needs to reach a global
 audience, Globify makes localization a breeze! 🚀
@@ -16,6 +19,7 @@ Make sure you have on the current directory a `globify.config.json` file with th
   "folder": ".../..."
 }
 ```
+
 And a `.env` file with the following structure:
 
 ```bash
