@@ -1,0 +1,20 @@
+{
+  "main": "src/main.ts",
+  "license": "GPL-3.0-or-later",
+  "tasks": {
+    "dev": "deno run --watch --allow-all src/main.ts",
+    "build": "deno compile -R -W -E --allow-net=deepl.com -o tests/globify src/main.ts"
+  },
+  "imports": {
+    "@std/assert": "jsr:@std/assert@1",
+    "@std/cli": "jsr:@std/cli@^1.0.6",
+    "@std/dotenv": "jsr:@std/dotenv@^0.225.2",
+    "@std/path": "jsr:@std/path@^1.0.7",
+    "@valibot/valibot": "jsr:@valibot/valibot@^0.42.1",
+    "~/": "./src/"
+  },
+  "fmt": {
+    "lineWidth": 120,
+    "singleQuote": true
+  }
+}
