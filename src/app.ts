@@ -35,10 +35,16 @@ export class App {
       if (lang === baseLang) continue;
       console.log(`Translating ${baseLang} to ${lang}`);
       const outputFilePath = join(Deno.cwd(), folder, `${lang}.${ext}`);
+      let previousContent = {} as LanguageContent;
+
+      if (await this.filesManager.exists(outputFilePath)) {
+        previousContent = await this.filesManager.read(outputFilePath);
+      }
       const outputContent = await this.translateObject(
         inputContent,
         baseLang,
         lang,
+        previousContent,
       );
       await this.filesManager.write(outputFilePath, outputContent);
     }
@@ -48,27 +54,35 @@ export class App {
     obj: LanguageContent,
     from: string,
     target: string,
+    previousTranslation: LanguageContent = {},
   ): Promise<LanguageContent> {
-    const translate: LanguageContent = {} as LanguageContent;
-
+    const translated: LanguageContent = {} as LanguageContent;
+  
     for (const key in obj) {
       if (typeof obj[key] === 'string') {
-        translate[key] = await this.translator.translate(
-          obj[key],
-          from,
-          target,
-        );
+        // Check if the previous translation exists and matches the current string
+        if (previousTranslation[key] === obj[key]) {
+          translated[key] = previousTranslation[key]; // Use the existing translation
+        } else {
+          translated[key] = await this.translator.translate(
+            obj[key],
+            from,
+            target,
+          ); // Translate the new or changed string
+        }
       } else if (typeof obj[key] === 'object' && obj[key] !== null) {
-        translate[key] = await this.translateObject(
+        // Recursively translate nested objects, passing in any previous translations
+        translated[key] = await this.translateObject(
           obj[key] as LanguageContent,
           from,
           target,
+          previousTranslation[key] as LanguageContent,
         );
       } else {
-        translate[key] = obj[key];
+        translated[key] = obj[key]; // Preserve non-string values as they are
       }
     }
-
-    return translate;
+    return translated;
   }
+  
 }
