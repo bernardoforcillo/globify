@@ -4,6 +4,7 @@ export class JSONManager implements FileManager {
   async write(filePath: string, content: LanguageContent): Promise<void> {
     await Deno.writeTextFile(filePath, JSON.stringify(content, null, 2));
   }
+
   async read(filePath: string): Promise<LanguageContent> {
     const fileContent = await Deno.readTextFile(filePath);
     let content: object = {};
@@ -17,8 +18,13 @@ export class JSONManager implements FileManager {
     }
     return content as LanguageContent;
   }
+
   async exists(filePath: string): Promise<boolean> {
-    const fileInfo = await Deno.stat(filePath);
-    return fileInfo.isFile;
+    try {
+      const fileInfo = await Deno.stat(filePath);
+      return fileInfo.isFile;
+    } catch {
+      return false;
+    }
   }
 }

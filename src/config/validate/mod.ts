@@ -3,8 +3,8 @@ import type { Config } from '~/config/mod.ts';
 
 export const schema = v.object({
   fileExtension: v.picklist(['json']),
-  baseLanguage: v.pipe(v.string(), v.regex(/^[a-z]{2}(-[A-Z]{2, 4})?$/)),
-  languages: v.array(v.pipe(v.string(), v.regex(/^[a-z]{2}(-[A-Z]{2, 4})?$/))),
+  baseLanguage: v.pipe(v.string(), v.regex(/^[a-z]{2}(-[A-Z][a-z]{3})?$/)),
+  languages: v.array(v.pipe(v.string(), v.regex(/^[a-z]{2}(-[A-Z][a-z]{3})?$/))),
   folder: v.string(),
 });
 
