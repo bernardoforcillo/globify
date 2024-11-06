@@ -14,6 +14,7 @@ Make sure you have on the current directory a `globify.config.json` file with th
 
 ```json
 {
+  "translationType": "...",
   "languages": ["..."],
   "baseLanguage": "...",
   "fileExtension": "json",

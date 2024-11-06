@@ -1,19 +1,15 @@
 import { join } from '@std/path/join';
-import type { Translator } from '~/translator/mod.ts';
 import type { Translation } from '~/translation/mod.ts';
 import type { ObjectTranslator } from '~/objects/mod.ts';
 import type { FileManager, LanguageContent } from '~/files/mod.ts';
-import { SimpleObjectTranslator } from '~/objects/simple-object/mod.ts';
 
-export class SingleFileTranslator implements Translation {
+export class SingleFileTranslator<Obj extends ObjectTranslator> implements Translation {
   private filesManager: FileManager;
-  private translator: Translator;
-  private objectTranslator: ObjectTranslator;
+  private objectTranslator: Obj;
 
-  constructor(fileManager: FileManager, translator: Translator) {
-    this.translator = translator;
+  constructor(fileManager: FileManager, objectTranslator: Obj) {
     this.filesManager = fileManager;
-    this.objectTranslator = new SimpleObjectTranslator(translator);
+    this.objectTranslator = objectTranslator;
   }
 
   async translate(folder: string, baseLang: string, languages: string[], ext: string): Promise<void> {
