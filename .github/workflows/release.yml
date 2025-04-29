@@ -41,7 +41,7 @@ jobs:
         uses: metcalfc/changelog-generator@v4.6.2
         with:
           myToken: ${{ secrets.SECRET_GITHUB_TOKEN }}
-          origin: 'origin'
+          origin: 'head-ref'
           fetch: false
 
       - name: Create Release
