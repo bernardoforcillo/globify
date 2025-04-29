@@ -38,9 +38,10 @@ jobs:
 
       - name: Generate changelog
         id: changelog
-        uses: metcalfc/changelog-generator@v4.1.0
+        uses: metcalfc/changelog-generator@v4.6.2
         with:
           myToken: ${{ secrets.SECRET_GITHUB_TOKEN }}
+          fetch: false
 
       - name: Create Release
         id: create_release
