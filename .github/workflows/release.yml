@@ -1,0 +1,66 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.23'
+          check-latest: true
+
+      - name: Get dependencies
+        run: go mod download
+
+      - name: Run tests
+        run: go test -v ./...
+
+      - name: Build for multiple platforms
+        run: |
+          mkdir -p build
+          GOOS=linux GOARCH=amd64 go build -o build/globify-linux-amd64 ./cmd/globify
+          GOOS=darwin GOARCH=amd64 go build -o build/globify-darwin-amd64 ./cmd/globify
+          GOOS=windows GOARCH=amd64 go build -o build/globify-windows-amd64.exe ./cmd/globify
+
+      - name: Generate changelog
+        id: changelog
+        uses: metcalfc/changelog-generator@v4.1.0
+        with:
+          myToken: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Release ${{ github.ref_name }}
+          body: |
+            # Globify Release ${{ github.ref_name }}
+            
+            ## Changes
+            ${{ steps.changelog.outputs.changelog }}
+            
+            ## Installation
+            
+            Download the appropriate binary for your platform and add it to your PATH.
+          files: |
+            build/globify-linux-amd64
+            build/globify-darwin-amd64
+            build/globify-windows-amd64.exe
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
