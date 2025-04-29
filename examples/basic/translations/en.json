@@ -1,0 +1,27 @@
+{
+  "welcome": {
+    "greeting": "Hello {name}!",
+    "timeOfDay": {
+      "morning": "Good morning",
+      "afternoon": "Good afternoon",
+      "evening": "Good evening"
+    }
+  },
+  "notifications": {
+    "count": "{count, plural, =0 {You have no notifications} =1 {You have one notification} other {You have # notifications}}",
+    "lastUpdate": "Last updated: {date, date, full} at {time, time, short}"
+  },
+  "profile": {
+    "memberStatus": "{status, select, premium {Premium Member since {startDate, date, short}} basic {Basic Member} trial {Trial Period}}",
+    "followers": "{followers, plural, =0 {No followers yet} =1 {1 follower} other {# followers}}",
+    "bio": "<p>Hello, I'm {name}! I'm a {role, select, developer {developer} designer {designer} other {professional}} with {years} years of experience.</p>"
+  },
+  "cart": {
+    "items": "{itemCount, plural, =0 {Your cart is empty} =1 {One item in your cart} other {# items in your cart}}",
+    "total": "Total: {amount, number, currency}"
+  },
+  "appointment": {
+    "reminder": "Your appointment is scheduled for {date, date, full} at {time, time, short}",
+    "location": "Location: {location, select, office {our office} online {video call} other {to be determined}}"
+  }
+}

@@ -3,5 +3,5 @@
   "editor.insertSpaces": true,
   "files.autoSave": "afterDelay",
   "editor.formatOnSaveMode": "modifications",
-  "editor.defaultFormatter": "denoland.vscode-deno"
+  "editor.defaultFormatter": "golang.go"
 }

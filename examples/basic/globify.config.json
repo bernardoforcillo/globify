@@ -1,0 +1,7 @@
+{
+  "translationType": "ast-json",
+  "fileExtension": "json",
+  "baseLanguage": "en",
+  "languages": ["fr", "es", "de", "it"],
+  "folder": "translations"
+}
