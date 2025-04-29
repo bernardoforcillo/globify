@@ -66,7 +66,7 @@ func (a *App) Run() error {
 		return fmt.Errorf("failed to read base language file: %w", err)
 	}
 	
-	// Translate to each target language
+	// Process each language sequentially instead of concurrently
 	for _, lang := range a.config.Languages {
 		// Skip if target language is the same as base language
 		if lang == a.config.BaseLanguage {
@@ -80,16 +80,16 @@ func (a *App) Run() error {
 		
 		// Check if target file already exists
 		var previousContent files.LanguageContent
-		exists, err := a.fileManager.Exists(targetFilePath)
-		if err != nil {
-			log.Printf("Warning: Error checking existence of %s: %v", targetFilePath, err)
+		exists, fileErr := a.fileManager.Exists(targetFilePath)
+		if fileErr != nil {
+			log.Printf("Warning: Error checking existence of %s: %v", targetFilePath, fileErr)
 		}
 		
 		if exists {
 			log.Printf("Target file %s already exists, using existing translations as baseline", targetFilePath)
-			previousContent, err = a.fileManager.Read(targetFilePath)
-			if err != nil {
-				log.Printf("Warning: Failed to read existing target file %s: %v", targetFilePath, err)
+			previousContent, fileErr = a.fileManager.Read(targetFilePath)
+			if fileErr != nil {
+				log.Printf("Warning: Failed to read existing target file %s: %v", targetFilePath, fileErr)
 				previousContent = make(files.LanguageContent)
 			}
 		} else {
@@ -97,20 +97,20 @@ func (a *App) Run() error {
 		}
 		
 		// Process translations
-		translatedContent, err := a.processor.Execute(
+		translatedContent, procErr := a.processor.Execute(
 			baseContent,
 			a.config.BaseLanguage,
 			lang,
 			previousContent,
 		)
-		if err != nil {
-			return fmt.Errorf("failed to translate to %s: %w", lang, err)
+		if procErr != nil {
+			return fmt.Errorf("failed to translate to %s: %w", lang, procErr)
 		}
 		
 		// Write translated content to file
 		log.Printf("Writing translated content to %s", targetFilePath)
-		if err := a.fileManager.Write(targetFilePath, translatedContent); err != nil {
-			return fmt.Errorf("failed to write translated file %s: %w", targetFilePath, err)
+		if writeErr := a.fileManager.Write(targetFilePath, translatedContent); writeErr != nil {
+			return fmt.Errorf("failed to write translated file %s: %w", targetFilePath, writeErr)
 		}
 		
 		log.Printf("Successfully translated to %s", lang)

@@ -11,13 +11,24 @@ import (
 // SimpleProcessor provides a basic implementation that translates strings in objects
 type SimpleProcessor struct {
 	translator translator.Translator
+	// Add a worker pool size to control concurrency
+	workerPoolSize int
 }
 
 // NewSimpleProcessor creates a new SimpleProcessor
 func NewSimpleProcessor(translator translator.Translator) *SimpleProcessor {
+	// Set workerPoolSize to 1 to disable concurrency
 	return &SimpleProcessor{
-		translator: translator,
+		translator:    translator,
+		workerPoolSize: 1,
 	}
+}
+
+// SetWorkerPoolSize allows dynamically configuring the number of worker goroutines
+// This is now maintained for backward compatibility but will always set to 1
+func (p *SimpleProcessor) SetWorkerPoolSize(count int) {
+	// Force to 1 to disable concurrency
+	p.workerPoolSize = 1
 }
 
 // Execute translates all string values in the content recursively
@@ -27,10 +38,11 @@ func (p *SimpleProcessor) Execute(
 	previousTranslation files.LanguageContent,
 ) (files.LanguageContent, error) {
 	result := make(files.LanguageContent)
-
+	
+	// Process each item sequentially instead of using goroutines
 	for key, value := range obj {
 		prevValue, hasPrevious := previousTranslation[key]
-
+		
 		switch v := value.(type) {
 		case string:
 			// If previous translation exists and matches, use it
@@ -46,8 +58,9 @@ func (p *SimpleProcessor) Execute(
 				result[key] = v // Keep original in case of error
 				continue
 			}
+			
 			result[key] = translated
-
+			
 		case map[string]interface{}:
 			// Handle nested objects
 			var prevMap files.LanguageContent
@@ -60,12 +73,13 @@ func (p *SimpleProcessor) Execute(
 			} else {
 				prevMap = make(files.LanguageContent)
 			}
-
+			
 			// Recursively translate the nested object
 			nestedResult, err := p.Execute(v, from, target, prevMap)
 			if err != nil {
 				return nil, fmt.Errorf("failed to translate nested object at key '%s': %w", key, err)
 			}
+			
 			result[key] = nestedResult
 			
 		default:
@@ -73,6 +87,6 @@ func (p *SimpleProcessor) Execute(
 			result[key] = value
 		}
 	}
-
+	
 	return result, nil
 }

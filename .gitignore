@@ -1,5 +1,4 @@
 .env
-tests
 examples/**/*.json
 !examples/**/en.json
 globify

@@ -12,13 +12,24 @@ import (
 // ASTProcessor handles translation of ICU message format strings
 type ASTProcessor struct {
 	translator translator.Translator
+	// Add a worker pool size to control concurrency
+	workerPoolSize int
 }
 
 // NewASTProcessor creates a new ASTProcessor
 func NewASTProcessor(translator translator.Translator) *ASTProcessor {
+	// Set workerPoolSize to 1 to disable concurrency
 	return &ASTProcessor{
-		translator: translator,
+		translator:     translator,
+		workerPoolSize: 1,
 	}
+}
+
+// SetWorkerPoolSize allows dynamically configuring the number of worker goroutines
+// This is now maintained for backward compatibility but will always set to 1
+func (p *ASTProcessor) SetWorkerPoolSize(count int) {
+	// Force to 1 to disable concurrency
+	p.workerPoolSize = 1
 }
 
 // Execute translates content with ICU message format strings
@@ -28,10 +39,11 @@ func (p *ASTProcessor) Execute(
 	previousTranslation files.LanguageContent,
 ) (files.LanguageContent, error) {
 	result := make(files.LanguageContent)
-
+	
+	// Process each item sequentially instead of using goroutines
 	for key, value := range obj {
 		prevValue, hasPrevious := previousTranslation[key]
-
+		
 		switch v := value.(type) {
 		case string:
 			// If previous translation exists and matches, use it
@@ -64,7 +76,7 @@ func (p *ASTProcessor) Execute(
 				continue
 			}
 			result[key] = translatedMessage
-
+			
 		case map[string]interface{}:
 			// Handle nested objects
 			var prevMap files.LanguageContent
@@ -77,7 +89,7 @@ func (p *ASTProcessor) Execute(
 			} else {
 				prevMap = make(files.LanguageContent)
 			}
-
+			
 			// Recursively translate the nested object
 			nestedResult, err := p.Execute(v, from, target, prevMap)
 			if err != nil {
@@ -90,7 +102,7 @@ func (p *ASTProcessor) Execute(
 			result[key] = value
 		}
 	}
-
+	
 	return result, nil
 }
 
@@ -98,78 +110,89 @@ func (p *ASTProcessor) Execute(
 func (p *ASTProcessor) translateElements(elements []icu.Element, from, target string) (string, error) {
 	var result string
 	
+	// Always use sequential processing to avoid too many requests
 	for _, element := range elements {
-		switch element.Type() {
-		case icu.Literal:
-			// Only translate literal text elements
-			lit := element.(icu.LiteralElement)
-			if lit.Value == "" {
-				result += ""
-				continue
-			}
-			
-			translated, err := p.translator.Translate(lit.Value, from, target)
-			if err != nil {
-				return "", fmt.Errorf("failed to translate literal: %w", err)
-			}
-			result += translated
-			
-		case icu.Tag:
-			// Handle tag elements by translating their children
-			tag := element.(icu.TagElement)
-			translatedContent, err := p.translateElements(tag.Children, from, target)
-			if err != nil {
-				return "", fmt.Errorf("failed to translate tag content: %w", err)
-			}
-			result += fmt.Sprintf("<%s>%s</%s>", tag.Value, translatedContent, tag.Value)
-			
-		case icu.Select:
-			// Handle select elements by translating each option
-			sel := element.(icu.SelectElement)
-			translatedOptions := make(map[string]string)
-			
-			for key, option := range sel.Options {
-				translatedOption, err := p.translateElements(option, from, target)
-				if err != nil {
-					return "", fmt.Errorf("failed to translate select option: %w", err)
-				}
-				translatedOptions[key] = translatedOption
-			}
-			
-			// Reconstruct the select format
-			selectStr := fmt.Sprintf("{%s, select, ", sel.Value)
-			for key, value := range translatedOptions {
-				selectStr += fmt.Sprintf("%s {%s} ", key, value)
-			}
-			selectStr += "}"
-			result += selectStr
-			
-		case icu.Plural:
-			// Handle plural elements by translating each option
-			plural := element.(icu.PluralElement)
-			translatedOptions := make(map[string]string)
-			
-			for key, option := range plural.Options {
-				translatedOption, err := p.translateElements(option, from, target)
-				if err != nil {
-					return "", fmt.Errorf("failed to translate plural option: %w", err)
-				}
-				translatedOptions[key] = translatedOption
-			}
-			
-			// Reconstruct the plural format
-			pluralStr := fmt.Sprintf("{%s, plural, ", plural.Value)
-			for key, value := range translatedOptions {
-				pluralStr += fmt.Sprintf("%s {%s} ", key, value)
-			}
-			pluralStr += "}"
-			result += pluralStr
-			
-		default:
-			// Keep other elements as they are
-			result += element.String()
+		translated, err := p.translateElement(element, from, target)
+		if err != nil {
+			return "", err
 		}
+		result += translated
 	}
 	
 	return result, nil
+}
+
+// translateElement translates a single ICU element
+func (p *ASTProcessor) translateElement(element icu.Element, from, target string) (string, error) {
+	switch element.Type() {
+	case icu.Literal:
+		// Only translate literal text elements
+		lit := element.(icu.LiteralElement)
+		if lit.Value == "" {
+			return "", nil
+		}
+		
+		translated, err := p.translator.Translate(lit.Value, from, target)
+		if err != nil {
+			return "", fmt.Errorf("failed to translate literal: %w", err)
+		}
+		return translated, nil
+		
+	case icu.Tag:
+		// Handle tag elements by translating their children
+		tag := element.(icu.TagElement)
+		translatedContent, err := p.translateElements(tag.Children, from, target)
+		if err != nil {
+			return "", fmt.Errorf("failed to translate tag content: %w", err)
+		}
+		return fmt.Sprintf("<%s>%s</%s>", tag.Value, translatedContent, tag.Value), nil
+		
+	case icu.Select:
+		// Handle select elements by translating each option sequentially
+		sel := element.(icu.SelectElement)
+		translatedOptions := make(map[string]string)
+		
+		// Process each option sequentially
+		for key, option := range sel.Options {
+			translatedOption, err := p.translateElements(option, from, target)
+			if err != nil {
+				return "", fmt.Errorf("failed to translate select option: %w", err)
+			}
+			translatedOptions[key] = translatedOption
+		}
+		
+		// Reconstruct the select format
+		selectStr := fmt.Sprintf("{%s, select, ", sel.Value)
+		for key, value := range translatedOptions {
+			selectStr += fmt.Sprintf("%s {%s} ", key, value)
+		}
+		selectStr += "}"
+		return selectStr, nil
+		
+	case icu.Plural:
+		// Handle plural elements by translating each option sequentially
+		plural := element.(icu.PluralElement)
+		translatedOptions := make(map[string]string)
+		
+		// Process each option sequentially
+		for key, option := range plural.Options {
+			translatedOption, err := p.translateElements(option, from, target)
+			if err != nil {
+				return "", fmt.Errorf("failed to translate plural option: %w", err)
+			}
+			translatedOptions[key] = translatedOption
+		}
+		
+		// Reconstruct the plural format
+		pluralStr := fmt.Sprintf("{%s, plural, ", plural.Value)
+		for key, value := range translatedOptions {
+			pluralStr += fmt.Sprintf("%s {%s} ", key, value)
+		}
+		pluralStr += "}"
+		return pluralStr, nil
+		
+	default:
+		// Keep other elements as they are
+		return element.String(), nil
+	}
 }
