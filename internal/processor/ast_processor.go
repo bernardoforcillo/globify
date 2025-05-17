@@ -3,6 +3,7 @@ package processor
 import (
 	"fmt"
 	"log"
+	"sort"
 
 	"github.com/bernardoforcillo/globify/internal/files"
 	"github.com/bernardoforcillo/globify/internal/icu"
@@ -161,10 +162,16 @@ func (p *ASTProcessor) translateElement(element icu.Element, from, target string
 			translatedOptions[key] = translatedOption
 		}
 		
-		// Reconstruct the select format
+		// Reconstruct the select format with sorted keys for consistent output
 		selectStr := fmt.Sprintf("{%s, select, ", sel.Value)
-		for key, value := range translatedOptions {
-			selectStr += fmt.Sprintf("%s {%s} ", key, value)
+		// Sort the keys for consistent output
+		var keys []string
+		for key := range translatedOptions {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			selectStr += fmt.Sprintf("%s {%s} ", key, translatedOptions[key])
 		}
 		selectStr += "}"
 		return selectStr, nil
@@ -183,11 +190,44 @@ func (p *ASTProcessor) translateElement(element icu.Element, from, target string
 			translatedOptions[key] = translatedOption
 		}
 		
-		// Reconstruct the plural format
+		// Reconstruct the plural format with specific order for keys
 		pluralStr := fmt.Sprintf("{%s, plural, ", plural.Value)
-		for key, value := range translatedOptions {
-			pluralStr += fmt.Sprintf("%s {%s} ", key, value)
+		
+		// Define the order of plural forms ('one' should come before 'other')
+		// This ensures consistent output matching test expectations
+		pluralForms := []string{"zero", "one", "two", "few", "many", "other"}
+		
+		for _, form := range pluralForms {
+			if value, ok := translatedOptions[form]; ok {
+				pluralStr += fmt.Sprintf("%s {%s} ", form, value)
+			}
 		}
+		
+		// Add any remaining forms that weren't in our predefined order
+		var remainingKeys []string
+		for key := range translatedOptions {
+			// Check if this key is one of our predefined forms
+			isPredefined := false
+			for _, form := range pluralForms {
+				if key == form {
+					isPredefined = true
+					break
+				}
+			}
+			
+			if !isPredefined {
+				remainingKeys = append(remainingKeys, key)
+			}
+		}
+		
+		// Sort the remaining keys for consistent output
+		if len(remainingKeys) > 0 {
+			sort.Strings(remainingKeys)
+			for _, key := range remainingKeys {
+				pluralStr += fmt.Sprintf("%s {%s} ", key, translatedOptions[key])
+			}
+		}
+		
 		pluralStr += "}"
 		return pluralStr, nil
 		
