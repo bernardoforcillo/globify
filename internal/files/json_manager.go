@@ -1,6 +1,7 @@
 package files
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -23,14 +24,18 @@ func (m *JSONManager) Write(filePath string, content LanguageContent) error {
 		return fmt.Errorf("failed to create directory %s: %w", dir, err)
 	}
 
-	// Marshal with indentation for readability
-	data, err := json.MarshalIndent(content, "", "  ")
-	if err != nil {
+
+	buffer := &bytes.Buffer{}
+	encoder := json.NewEncoder(buffer)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "  ")
+	
+	if err := encoder.Encode(content); err != nil {
 		return fmt.Errorf("failed to marshal JSON content for %s: %w", filePath, err)
 	}
 
 	// Write to file
-	err = os.WriteFile(filePath, data, 0644)
+	err := os.WriteFile(filePath, buffer.Bytes(), 0644)
 	if err != nil {
 		return fmt.Errorf("failed to write file %s: %w", filePath, err)
 	}

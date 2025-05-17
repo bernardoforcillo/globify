@@ -2,3 +2,4 @@
 examples/**/*.json
 !examples/**/en.json
 globify
+main
