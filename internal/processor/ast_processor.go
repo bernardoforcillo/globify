@@ -43,6 +43,12 @@ func (p *ASTProcessor) Execute(
 	
 	// Process each item sequentially instead of using goroutines
 	for key, value := range obj {
+		// Skip keys starting with @ (metadata in ARB)
+		if len(key) > 0 && key[0] == '@' {
+			result[key] = value
+			continue
+		}
+
 		prevValue, hasPrevious := previousTranslation[key]
 		
 		switch v := value.(type) {

@@ -37,16 +37,24 @@ func (e LiteralElement) String() string    { return e.Value }
 
 // ArgumentElement is a placeholder element like {name}
 type ArgumentElement struct {
-	Value string
-	Style string
+	Value         string
+	Style         string
+	IsDoubleBrace bool
 }
 
 func (e ArgumentElement) Type() ElementType { return Argument }
 func (e ArgumentElement) String() string {
-	if e.Style != "" {
-		return fmt.Sprintf("{%s, %s}", e.Value, e.Style)
+	prefix := "{"
+	suffix := "}"
+	if e.IsDoubleBrace {
+		prefix = "{{"
+		suffix = "}}"
 	}
-	return fmt.Sprintf("{%s}", e.Value)
+
+	if e.Style != "" {
+		return fmt.Sprintf("%s%s, %s%s", prefix, e.Value, e.Style, suffix)
+	}
+	return fmt.Sprintf("%s%s%s", prefix, e.Value, suffix)
 }
 
 // NumberElement is a number format element like {count, number}
@@ -211,7 +219,7 @@ func parseMessage(message string, depth int) ([]Element, error) {
 	elements := []Element{}
 	
 	// Patterns for parsing
-	placeholderPattern := regexp.MustCompile(`\{([^{}]*)\}`)
+	placeholderPattern := regexp.MustCompile(`^\{([^{}]*)\}`)
 	poundPattern := regexp.MustCompile(`#`)
 	tagStartPattern := regexp.MustCompile(`<([^<>/]+)>`)
 	
@@ -243,17 +251,17 @@ func parseMessage(message string, depth int) ([]Element, error) {
 							// This might be a plural or select format
 							complexMatch := regexp.MustCompile(`^\{([^,{}]+),\s*(plural|select)\s*,\s*(.+)\}$`).
 								FindStringSubmatch(fullMatch)
-							
+
 							if complexMatch != nil {
 								variableName := strings.TrimSpace(complexMatch[1])
 								formatType := strings.TrimSpace(complexMatch[2])
 								optionsText := complexMatch[3]
-								
+
 								options, err := parseOptions(optionsText, depth+1)
 								if err != nil {
 									return nil, err
 								}
-								
+
 								// Create the appropriate element
 								if formatType == "plural" {
 									elements = append(elements, PluralElement{
@@ -266,19 +274,44 @@ func parseMessage(message string, depth int) ([]Element, error) {
 										Options: options,
 									})
 								}
-								
+
 								// Move past this complex structure
 								pos = i + 1
 								break
 							}
+
+							// Check for double braces {{...}}
+							if strings.HasPrefix(fullMatch, "{{") && strings.HasSuffix(fullMatch, "}}") {
+								content := fullMatch[2 : len(fullMatch)-2]
+								parts := strings.SplitN(strings.TrimSpace(content), ",", 3)
+
+								element := ArgumentElement{
+									Value:         strings.TrimSpace(parts[0]),
+									IsDoubleBrace: true,
+								}
+
+								if len(parts) >= 2 {
+									// In double braces, we treat everything after the first comma as style/format
+									// e.g. {{value, format}} -> Value: value, Style: format
+									rest := strings.TrimSpace(parts[1])
+									if len(parts) > 2 {
+										rest += ", " + strings.TrimSpace(parts[2])
+									}
+									element.Style = rest
+								}
+
+								elements = append(elements, element)
+								pos = i + 1
+								break
+							}
 						}
-						
+
 						// It's not a complex format, so fall back to normal placeholder handling
 						break
 					}
 				}
 			}
-			
+
 			// If we didn't handle it as a complex format, process it as a regular placeholder
 			if !nestedContent || pos < len(message) && message[pos] == '{' {
 				placeholderMatch := placeholderPattern.FindStringSubmatchIndex(message[pos:])
