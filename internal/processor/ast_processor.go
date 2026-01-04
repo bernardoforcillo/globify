@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"sync"
 
 	"github.com/bernardoforcillo/globify/internal/files"
 	"github.com/bernardoforcillo/globify/internal/icu"
@@ -19,7 +20,6 @@ type ASTProcessor struct {
 
 // NewASTProcessor creates a new ASTProcessor
 func NewASTProcessor(translator translator.Translator) *ASTProcessor {
-	// Set workerPoolSize to 1 to disable concurrency
 	return &ASTProcessor{
 		translator:     translator,
 		workerPoolSize: 1,
@@ -27,10 +27,11 @@ func NewASTProcessor(translator translator.Translator) *ASTProcessor {
 }
 
 // SetWorkerPoolSize allows dynamically configuring the number of worker goroutines
-// This is now maintained for backward compatibility but will always set to 1
 func (p *ASTProcessor) SetWorkerPoolSize(count int) {
-	// Force to 1 to disable concurrency
-	p.workerPoolSize = 1
+	if count < 1 {
+		count = 1
+	}
+	p.workerPoolSize = count
 }
 
 // Execute translates content with ICU message format strings
@@ -39,13 +40,31 @@ func (p *ASTProcessor) Execute(
 	from, target string,
 	previousTranslation files.LanguageContent,
 ) (files.LanguageContent, error) {
+	// Create a semaphore to limit concurrency
+	sem := make(chan struct{}, p.workerPoolSize)
+	return p.executeInternal(obj, from, target, previousTranslation, sem)
+}
+
+func (p *ASTProcessor) executeInternal(
+	obj files.LanguageContent,
+	from, target string,
+	previousTranslation files.LanguageContent,
+	sem chan struct{},
+) (files.LanguageContent, error) {
 	result := make(files.LanguageContent)
-	
-	// Process each item sequentially instead of using goroutines
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	// Error channel to collect errors from goroutines
+	errChan := make(chan error, len(obj))
+
+	// Process each item
 	for key, value := range obj {
 		// Skip keys starting with @ (metadata in ARB)
 		if len(key) > 0 && key[0] == '@' {
+			mu.Lock()
 			result[key] = value
+			mu.Unlock()
 			continue
 		}
 
@@ -55,34 +74,53 @@ func (p *ASTProcessor) Execute(
 		case string:
 			// If previous translation exists and matches, use it
 			if hasPrevious && prevValue == value {
+				mu.Lock()
 				result[key] = prevValue
+				mu.Unlock()
 				continue
 			}
-			
-			// Parse the message string into AST
-			ast, err := icu.Parse(v)
-			if err != nil {
-				log.Printf("Warning: Failed to parse ICU message for key '%s': %v", key, err)
+
+			wg.Add(1)
+			go func(k, val string) {
+				defer wg.Done()
 				
-				// Fall back to simple translation
-				translated, err := p.translator.Translate(v, from, target)
+				// Acquire semaphore
+				sem <- struct{}{}
+				defer func() { <-sem }()
+
+				// Parse the message string into AST
+				ast, err := icu.Parse(val)
 				if err != nil {
-					log.Printf("Warning: Failed to translate key '%s': %v", key, err)
-					result[key] = v // Keep original in case of error
-					continue
+					log.Printf("Warning: Failed to parse ICU message for key '%s': %v", k, err)
+
+					// Fall back to simple translation
+					translated, err := p.translator.Translate(val, from, target)
+					if err != nil {
+						log.Printf("Warning: Failed to translate key '%s': %v", k, err)
+						mu.Lock()
+						result[k] = val // Keep original in case of error
+						mu.Unlock()
+						return
+					}
+					mu.Lock()
+					result[k] = translated
+					mu.Unlock()
+					return
 				}
-				result[key] = translated
-				continue
-			}
-			
-			// Translate the AST
-			translatedMessage, err := p.translateElements(ast, from, target)
-			if err != nil {
-				log.Printf("Warning: Failed to translate AST for key '%s': %v", key, err)
-				result[key] = v // Keep original in case of error
-				continue
-			}
-			result[key] = translatedMessage
+
+				// Translate the AST
+				translatedMessage, err := p.translateElements(ast, from, target)
+				if err != nil {
+					log.Printf("Warning: Failed to translate AST for key '%s': %v", k, err)
+					mu.Lock()
+					result[k] = val // Keep original in case of error
+					mu.Unlock()
+					return
+				}
+				mu.Lock()
+				result[k] = translatedMessage
+				mu.Unlock()
+			}(key, v)
 			
 		case map[string]interface{}:
 			// Handle nested objects
@@ -98,15 +136,31 @@ func (p *ASTProcessor) Execute(
 			}
 			
 			// Recursively translate the nested object
-			nestedResult, err := p.Execute(v, from, target, prevMap)
+			nestedResult, err := p.executeInternal(v, from, target, prevMap, sem)
 			if err != nil {
-				return nil, fmt.Errorf("failed to translate nested object at key '%s': %w", key, err)
+				errChan <- fmt.Errorf("failed to translate nested object at key '%s': %w", key, err)
+				continue
 			}
+
+			mu.Lock()
 			result[key] = nestedResult
+			mu.Unlock()
 			
 		default:
 			// Keep non-string, non-object values as they are
+			mu.Lock()
 			result[key] = value
+			mu.Unlock()
+		}
+	}
+
+	wg.Wait()
+	close(errChan)
+
+	// Check if any error occurred
+	for err := range errChan {
+		if err != nil {
+			return nil, err
 		}
 	}
 	

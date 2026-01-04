@@ -204,6 +204,14 @@ func (e TagElement) String() string {
 	return sb.String()
 }
 
+var (
+	// Patterns for parsing
+	placeholderPattern   = regexp.MustCompile(`^\{([^{}]*)\}`)
+	poundPattern         = regexp.MustCompile(`#`)
+	tagStartPattern      = regexp.MustCompile(`<([^<>/]+)>`)
+	complexFormatPattern = regexp.MustCompile(`^\{([^,{}]+),\s*(plural|select)\s*,\s*(.+)\}$`)
+)
+
 // Parse parses an ICU message into a slice of Elements
 func Parse(message string) ([]Element, error) {
 	return parseMessage(message, 0)
@@ -217,11 +225,6 @@ func parseMessage(message string, depth int) ([]Element, error) {
 	}
 
 	elements := []Element{}
-	
-	// Patterns for parsing
-	placeholderPattern := regexp.MustCompile(`^\{([^{}]*)\}`)
-	poundPattern := regexp.MustCompile(`#`)
-	tagStartPattern := regexp.MustCompile(`<([^<>/]+)>`)
 	
 	// Current position in the message
 	pos := 0
@@ -249,8 +252,7 @@ func parseMessage(message string, depth int) ([]Element, error) {
 						// Check if this is a complex format (plural or select)
 						if nestedContent {
 							// This might be a plural or select format
-							complexMatch := regexp.MustCompile(`^\{([^,{}]+),\s*(plural|select)\s*,\s*(.+)\}$`).
-								FindStringSubmatch(fullMatch)
+							complexMatch := complexFormatPattern.FindStringSubmatch(fullMatch)
 
 							if complexMatch != nil {
 								variableName := strings.TrimSpace(complexMatch[1])
