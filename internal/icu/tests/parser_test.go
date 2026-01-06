@@ -69,6 +69,77 @@ func TestParseArgument(t *testing.T) {
 	}
 }
 
+func TestParseDoubleBraceArgument(t *testing.T) {
+	message := "Hello, {{name}}!"
+	elements, err := icu.Parse(message)
+
+	if err != nil {
+		t.Errorf("Parse() error = %v", err)
+	}
+
+	if len(elements) != 3 {
+		t.Errorf("Parse() returned %d elements, want 3", len(elements))
+	}
+
+	// First element should be a literal "Hello, "
+	if elements[0].Type() != icu.Literal {
+		t.Errorf("First element type = %v, want %v", elements[0].Type(), icu.Literal)
+	}
+
+	// Second element should be an argument "{{name}}"
+	if elements[1].Type() != icu.Argument {
+		t.Errorf("Second element type = %v, want %v", elements[1].Type(), icu.Argument)
+	}
+
+	arg, ok := elements[1].(icu.ArgumentElement)
+	if !ok {
+		t.Errorf("Element is not an ArgumentElement")
+	}
+
+	if arg.Value != "name" {
+		t.Errorf("Argument value = %v, want %v", arg.Value, "name")
+	}
+
+	if !arg.IsDoubleBrace {
+		t.Errorf("Argument IsDoubleBrace = %v, want %v", arg.IsDoubleBrace, true)
+	}
+
+	// Third element should be a literal "!"
+	if elements[2].Type() != icu.Literal {
+		t.Errorf("Third element type = %v, want %v", elements[2].Type(), icu.Literal)
+	}
+}
+
+func TestParseDoubleBraceFormatted(t *testing.T) {
+	message := "{{value, format}}"
+	elements, err := icu.Parse(message)
+
+	if err != nil {
+		t.Errorf("Parse() error = %v", err)
+	}
+
+	if len(elements) != 1 {
+		t.Errorf("Parse() returned %d elements, want 1", len(elements))
+	}
+
+	arg, ok := elements[0].(icu.ArgumentElement)
+	if !ok {
+		t.Errorf("Element is not an ArgumentElement")
+	}
+
+	if arg.Value != "value" {
+		t.Errorf("Argument value = %v, want %v", arg.Value, "value")
+	}
+
+	if arg.Style != "format" {
+		t.Errorf("Argument style = %v, want %v", arg.Style, "format")
+	}
+
+	if !arg.IsDoubleBrace {
+		t.Errorf("Argument IsDoubleBrace = %v, want %v", arg.IsDoubleBrace, true)
+	}
+}
+
 func TestParseFormattedElement(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -275,6 +346,16 @@ func TestStringRepresentation(t *testing.T) {
 			name:     "Pound",
 			element:  icu.PoundElement{},
 			expected: "#",
+		},
+		{
+			name:     "Double Brace Argument",
+			element:  icu.ArgumentElement{Value: "name", IsDoubleBrace: true},
+			expected: "{{name}}",
+		},
+		{
+			name:     "Double Brace Argument with style",
+			element:  icu.ArgumentElement{Value: "value", Style: "format", IsDoubleBrace: true},
+			expected: "{{value, format}}",
 		},
 	}
 

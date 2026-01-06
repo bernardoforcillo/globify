@@ -143,6 +143,80 @@ func TestSimpleProcessorExecute(t *testing.T) {
 	}
 }
 
+func TestSimpleProcessorExecuteWithMetadata(t *testing.T) {
+	// Create a mock translator
+	mockTranslator := createMockTranslator()
+
+	// Create a SimpleProcessor
+	proc := processor.NewSimpleProcessor(mockTranslator)
+
+	// Test data with metadata
+	baseContent := files.LanguageContent{
+		"greeting": "Hello",
+		"@greeting": map[string]interface{}{
+			"description": "A welcome message",
+		},
+		"@metadata": "Some string metadata",
+	}
+
+	// Execute the processor
+	result, err := proc.Execute(baseContent, "en", "fr", files.LanguageContent{})
+
+	if err != nil {
+		t.Errorf("Execute() error = %v", err)
+	}
+
+	// Check content
+	expected := files.LanguageContent{
+		"greeting": "[fr] Hello",
+		"@greeting": map[string]interface{}{
+			"description": "A welcome message", // Should be preserved
+		},
+		"@metadata": "Some string metadata", // Should be preserved
+	}
+
+	if !compareMaps(t, result, expected) {
+		t.Errorf("Maps are not equal")
+	}
+}
+
+func TestASTProcessorExecuteWithMetadata(t *testing.T) {
+	// Create a mock translator
+	mockTranslator := createMockTranslator()
+
+	// Create an ASTProcessor
+	proc := processor.NewASTProcessor(mockTranslator)
+
+	// Test data with metadata
+	baseContent := files.LanguageContent{
+		"greeting": "Hello",
+		"@greeting": map[string]interface{}{
+			"description": "A welcome message",
+		},
+		"@metadata": "Some string metadata",
+	}
+
+	// Execute the processor
+	result, err := proc.Execute(baseContent, "en", "fr", files.LanguageContent{})
+
+	if err != nil {
+		t.Errorf("Execute() error = %v", err)
+	}
+
+	// Check content
+	expected := files.LanguageContent{
+		"greeting": "[fr] Hello",
+		"@greeting": map[string]interface{}{
+			"description": "A welcome message", // Should be preserved
+		},
+		"@metadata": "Some string metadata", // Should be preserved
+	}
+
+	if !compareMaps(t, result, expected) {
+		t.Errorf("Maps are not equal")
+	}
+}
+
 func TestSimpleProcessorExecuteWithErrors(t *testing.T) {
 	// Create a mock translator that returns errors
 	errorTranslator := createErrorMockTranslator()

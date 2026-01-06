@@ -3,6 +3,7 @@ package processor
 import (
 	"fmt"
 	"log"
+	"sync"
 
 	"github.com/bernardoforcillo/globify/internal/files"
 	"github.com/bernardoforcillo/globify/internal/translator"
@@ -17,18 +18,18 @@ type SimpleProcessor struct {
 
 // NewSimpleProcessor creates a new SimpleProcessor
 func NewSimpleProcessor(translator translator.Translator) *SimpleProcessor {
-	// Set workerPoolSize to 1 to disable concurrency
 	return &SimpleProcessor{
-		translator:    translator,
+		translator:     translator,
 		workerPoolSize: 1,
 	}
 }
 
 // SetWorkerPoolSize allows dynamically configuring the number of worker goroutines
-// This is now maintained for backward compatibility but will always set to 1
 func (p *SimpleProcessor) SetWorkerPoolSize(count int) {
-	// Force to 1 to disable concurrency
-	p.workerPoolSize = 1
+	if count < 1 {
+		count = 1
+	}
+	p.workerPoolSize = count
 }
 
 // Execute translates all string values in the content recursively
@@ -37,30 +38,69 @@ func (p *SimpleProcessor) Execute(
 	from, target string,
 	previousTranslation files.LanguageContent,
 ) (files.LanguageContent, error) {
+	// Create a semaphore to limit concurrency
+	sem := make(chan struct{}, p.workerPoolSize)
+	return p.executeInternal(obj, from, target, previousTranslation, sem)
+}
+
+func (p *SimpleProcessor) executeInternal(
+	obj files.LanguageContent,
+	from, target string,
+	previousTranslation files.LanguageContent,
+	sem chan struct{},
+) (files.LanguageContent, error) {
 	result := make(files.LanguageContent)
-	
-	// Process each item sequentially instead of using goroutines
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	// Error channel to collect errors from goroutines
+	errChan := make(chan error, len(obj))
+
+	// Process each item
 	for key, value := range obj {
+		// Skip keys starting with @ (metadata in ARB)
+		if len(key) > 0 && key[0] == '@' {
+			mu.Lock()
+			result[key] = value
+			mu.Unlock()
+			continue
+		}
+
 		prevValue, hasPrevious := previousTranslation[key]
-		
+
 		switch v := value.(type) {
 		case string:
 			// If previous translation exists and matches, use it
 			if hasPrevious && prevValue == value {
+				mu.Lock()
 				result[key] = prevValue
+				mu.Unlock()
 				continue
 			}
-			
-			// Translate the string
-			translated, err := p.translator.Translate(v, from, target)
-			if err != nil {
-				log.Printf("Warning: Failed to translate key '%s': %v", key, err)
-				result[key] = v // Keep original in case of error
-				continue
-			}
-			
-			result[key] = translated
-			
+
+			wg.Add(1)
+			go func(k, val string) {
+				defer wg.Done()
+
+				// Acquire semaphore
+				sem <- struct{}{}
+				defer func() { <-sem }()
+
+				// Translate the string
+				translated, err := p.translator.Translate(val, from, target)
+				if err != nil {
+					log.Printf("Warning: Failed to translate key '%s': %v", k, err)
+					mu.Lock()
+					result[k] = val // Keep original in case of error
+					mu.Unlock()
+					return
+				}
+
+				mu.Lock()
+				result[k] = translated
+				mu.Unlock()
+			}(key, v)
+
 		case map[string]interface{}:
 			// Handle nested objects
 			var prevMap files.LanguageContent
@@ -73,20 +113,38 @@ func (p *SimpleProcessor) Execute(
 			} else {
 				prevMap = make(files.LanguageContent)
 			}
-			
+
 			// Recursively translate the nested object
-			nestedResult, err := p.Execute(v, from, target, prevMap)
+			// Note: We don't launch a goroutine for the nested object itself,
+			// but pass the shared semaphore down so its children can run concurrently
+			// respecting the global limit.
+			nestedResult, err := p.executeInternal(v, from, target, prevMap, sem)
 			if err != nil {
-				return nil, fmt.Errorf("failed to translate nested object at key '%s': %w", key, err)
+				errChan <- fmt.Errorf("failed to translate nested object at key '%s': %w", key, err)
+				continue
 			}
-			
+
+			mu.Lock()
 			result[key] = nestedResult
-			
+			mu.Unlock()
+
 		default:
 			// Keep non-string, non-object values as they are
+			mu.Lock()
 			result[key] = value
+			mu.Unlock()
 		}
 	}
-	
+
+	wg.Wait()
+	close(errChan)
+
+	// Check if any error occurred
+	for err := range errChan {
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return result, nil
 }
