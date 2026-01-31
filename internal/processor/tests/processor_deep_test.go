@@ -24,6 +24,20 @@ func (m *mockTranslatorForAST) Translate(text, from, to string) (string, error) 
 	return "[" + to + "] " + text, nil
 }
 
+// castToLanguageContent tries to cast an interface to files.LanguageContent
+// or map[string]interface{}, failing the test if neither works
+func castToLanguageContent(t *testing.T, v interface{}, key string) files.LanguageContent {
+	t.Helper()
+	if content, ok := v.(files.LanguageContent); ok {
+		return content
+	}
+	if contentMap, ok := v.(map[string]interface{}); ok {
+		return files.LanguageContent(contentMap)
+	}
+	t.Fatalf("Result missing %s map or invalid type: %T", key, v)
+	return nil
+}
+
 // TestASTProcessorDeep tests the ASTProcessor with complex ICU messages
 func TestASTProcessorDeep(t *testing.T) {
 	// Skip the test for now until we can investigate the AST processor's behavior more deeply
@@ -110,9 +124,6 @@ func TestASTProcessorDeep(t *testing.T) {
 
 // TestASTProcessorWithNestedObjects tests handling of deeply nested objects
 func TestASTProcessorWithNestedObjects(t *testing.T) {
-	// Skip the test for now until we can fix the AST processor test issues
-	t.Skip("Skipping test until AST processor behavior is more thoroughly analyzed")
-	
 	// Create a mock translator
 	mockTrans := createMockTranslator()
 	
@@ -145,37 +156,25 @@ func TestASTProcessorWithNestedObjects(t *testing.T) {
 	}
 	
 	// Verify the result structure and translations
-	level1, ok := result["level1"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("Result missing level1 map")
-	}
+	level1 := castToLanguageContent(t, result["level1"], "level1")
 	
 	if level1["text"] != "[fr] Level 1 text" {
 		t.Errorf("level1.text = %v, want %v", level1["text"], "[fr] Level 1 text")
 	}
 	
-	level2, ok := level1["level2"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("Result missing level2 map")
-	}
+	level2 := castToLanguageContent(t, level1["level2"], "level2")
 	
 	if level2["text"] != "[fr] Level 2 text" {
 		t.Errorf("level2.text = %v, want %v", level2["text"], "[fr] Level 2 text")
 	}
 	
-	level3, ok := level2["level3"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("Result missing level3 map")
-	}
+	level3 := castToLanguageContent(t, level2["level3"], "level3")
 	
 	if level3["text"] != "[fr] Level 3 text" {
 		t.Errorf("level3.text = %v, want %v", level3["text"], "[fr] Level 3 text")
 	}
 	
-	level4, ok := level3["level4"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("Result missing level4 map")
-	}
+	level4 := castToLanguageContent(t, level3["level4"], "level4")
 	
 	if level4["text"] != "[fr] Level 4 text" {
 		t.Errorf("level4.text = %v, want %v", level4["text"], "[fr] Level 4 text")
@@ -184,9 +183,6 @@ func TestASTProcessorWithNestedObjects(t *testing.T) {
 
 // TestASTProcessorErrorHandling tests how the processor handles various error conditions
 func TestASTProcessorErrorHandling(t *testing.T) {
-	// Skip the test for now until we can fix the AST processor test issues
-	t.Skip("Skipping test until AST processor behavior is more thoroughly analyzed")
-	
 	// Create an error-generating translator
 	errorTranslator := createErrorMockTranslator()
 	
@@ -226,10 +222,7 @@ func TestASTProcessorErrorHandling(t *testing.T) {
 		t.Errorf("Expected original text for failed tag translation, got %v", result["withTag"])
 	}
 	
-	nested, ok := result["nested"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("Result missing nested map")
-	}
+	nested := castToLanguageContent(t, result["nested"], "nested")
 	
 	if nested["key"] != "Nested text that will fail to translate" {
 		t.Errorf("Expected original text for failed nested translation, got %v", nested["key"])
